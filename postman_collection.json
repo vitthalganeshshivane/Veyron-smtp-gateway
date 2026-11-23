@@ -1,0 +1,391 @@
+{
+  "info": {
+    "name": "Veyron SMTP Gateway API",
+    "description": "Postman Collection for Veyron Outbound SMTP Gateway & Multi-Tenant Relay Engine",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectApiKey",
+      "value": "vsg_live_replace_with_actual_api_key",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Admin Authentication",
+      "item": [
+        {
+          "name": "Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('adminToken', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@veyron.internal\",\n  \"password\": \"ChangeThisMasterAdminPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Admin Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Email Dispatch (Project API)",
+      "item": [
+        {
+          "name": "Send Email with Dynamic SMTP in Body (Agnostic)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{projectApiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smtp\": {\n    \"host\": \"smtp.hostinger.com\",\n    \"port\": 465,\n    \"secure\": true,\n    \"auth\": {\n      \"user\": \"hello@yourdomain.com\",\n      \"pass\": \"YourPasswordHere\"\n    }\n  },\n  \"from\": {\n    \"name\": \"My Client App\",\n    \"address\": \"hello@yourdomain.com\"\n  },\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Delivered via Dynamic On-The-Fly SMTP!\",\n  \"html\": \"<h1>Success!</h1><p>This email used dynamic SMTP credentials passed directly in the API request.</p>\",\n  \"text\": \"Success! Dynamic SMTP relay test.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/emails/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["emails", "send"]
+            }
+          }
+        },
+        {
+          "name": "Send Email with Dynamic SMTP in Headers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{projectApiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-SMTP-Host",
+                "value": "smtp.gmail.com"
+              },
+              {
+                "key": "X-SMTP-Port",
+                "value": "587"
+              },
+              {
+                "key": "X-SMTP-User",
+                "value": "your-account@gmail.com"
+              },
+              {
+                "key": "X-SMTP-Pass",
+                "value": "your-app-password"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Delivered via Dynamic SMTP Headers\",\n  \"html\": \"<p>Sent using X-SMTP-* headers!</p>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/emails/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["emails", "send"]
+            }
+          }
+        },
+        {
+          "name": "Send Single Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{projectApiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "req_{{$randomUUID}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": {\n    \"name\": \"Vexillar App\",\n    \"address\": \"support@example.com\"\n  },\n  \"to\": [\"customer@example.com\"],\n  \"subject\": \"Welcome to Vexillar!\",\n  \"html\": \"<h1>Welcome aboard!</h1><p>Your subscription is active.</p>\",\n  \"text\": \"Welcome aboard! Your subscription is active.\",\n  \"metadata\": {\n    \"userId\": \"usr_482\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/emails/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["emails", "send"]
+            }
+          }
+        },
+        {
+          "name": "Send Bulk Emails",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{projectApiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emails\": [\n    {\n      \"to\": [\"user1@example.com\"],\n      \"subject\": \"Invoice #1\",\n      \"text\": \"Your invoice 1\"\n    },\n    {\n      \"to\": [\"user2@example.com\"],\n      \"subject\": \"Invoice #2\",\n      \"text\": \"Your invoice 2\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/emails/bulk",
+              "host": ["{{baseUrl}}"],
+              "path": ["emails", "bulk"]
+            }
+          }
+        },
+        {
+          "name": "Get Email Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{projectApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/emails?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["emails"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Project Management (Admin)",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Vexillar Production\",\n  \"description\": \"Render Hosted Web App\",\n  \"dailyLimit\": 2000,\n  \"monthlyLimit\": 50000,\n  \"rateLimitPerMinute\": 60,\n  \"allowedSenders\": [\"support@vexillar.com\", \"*@vexillar.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMTP Account Management (Admin)",
+      "item": [
+        {
+          "name": "List SMTP Accounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/smtp-accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["smtp-accounts"]
+            }
+          }
+        },
+        {
+          "name": "Register Hostinger SMTP Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hostinger Primary Relay\",\n  \"providerType\": \"hostinger\",\n  \"host\": \"smtp.hostinger.com\",\n  \"port\": 465,\n  \"username\": \"hello@yourdomain.com\",\n  \"password\": \"YourHostingerPassword123!\",\n  \"securityMode\": \"SSL/TLS\",\n  \"fromEmail\": \"hello@yourdomain.com\",\n  \"fromName\": \"Veyron Gateway\",\n  \"dailyLimit\": 500,\n  \"monthlyLimit\": 15000,\n  \"rateLimitPerMinute\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/smtp-accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["smtp-accounts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System & Queue Telemetry (Admin)",
+      "item": [
+        {
+          "name": "Get Queue Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/queue/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["system", "queue", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Detailed System Health & RAM",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["system", "health"]
+            }
+          }
+        },
+        {
+          "name": "Get Analytics Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "overview"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
