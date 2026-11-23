@@ -16,16 +16,28 @@ export async function getHealth(req, res) {
 
   try {
     const redis = getRedisClient();
-    if (redis.status === 'ready') {
-      const ping = await Promise.race([
-        redis.ping(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
-      ]);
-      if (ping === 'PONG') redisStatus = 'connected';
-    } else {
-      redisStatus = redis.status || 'disconnected';
+
+    if (redis.status === 'wait') {
+      await redis.connect();
+    }
+
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Redis ping timeout')), 2000);
+    });
+
+    try {
+      const ping = await Promise.race([redis.ping(), timeoutPromise]);
+      if (ping === 'PONG') {
+        redisStatus = 'connected';
+      } else {
+        redisStatus = redis.status || 'degraded';
+      }
+    } finally {
+      clearTimeout(timer);
     }
   } catch (err) {
+    logger.warn({ err: err.message }, 'Redis health check ping failed');
     redisStatus = 'error';
   }
 

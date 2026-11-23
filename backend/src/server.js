@@ -1,11 +1,13 @@
 import app from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
-import { closeRedisConnection } from './config/redis.js';
+import { initRedis, closeRedisConnection } from './config/redis.js';
+import { closeEmailQueue } from './queues/emailQueue.js';
 import { seedInitialAdmin } from './controllers/authController.js';
 import { logger } from './utils/logger.js';
 
 let server = null;
+let isShuttingDown = false;
 
 async function startServer() {
   try {
@@ -14,10 +16,13 @@ async function startServer() {
     // 1. Connect to MongoDB Atlas
     await connectDatabase();
 
-    // 2. Seed initial administrator if database is fresh
+    // 2. Initialize and verify shared Redis connection
+    await initRedis();
+
+    // 3. Seed initial administrator if database is fresh
     await seedInitialAdmin();
 
-    // 3. Start listening
+    // 4. Start listening
     server = app.listen(env.PORT, env.HOST, () => {
       logger.info(
         { port: env.PORT, host: env.HOST, nodeEnv: env.NODE_ENV },
@@ -25,26 +30,44 @@ async function startServer() {
       );
     });
 
-    // 4. Graceful Shutdown Handlers
+    // 5. Graceful Shutdown Handlers
     const shutdown = async (signal) => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
+
       logger.info({ signal }, 'Graceful shutdown initiated...');
 
-      if (server) {
-        server.close(async () => {
-          logger.info('HTTP server closed');
-          await closeRedisConnection();
-          await disconnectDatabase();
-          logger.info('All connections closed. Gateway exited cleanly.');
-          process.exit(0);
-        });
+      // Force shutdown if taking longer than 10s
+      const forceExitTimer = setTimeout(() => {
+        logger.error('Shutdown timed out. Forcing process exit.');
+        process.exit(1);
+      }, 10000);
+      forceExitTimer.unref();
 
-        // Force shutdown if taking longer than 10s
-        setTimeout(() => {
-          logger.error('Shutdown timed out. Forcing process exit.');
-          process.exit(1);
-        }, 10000).unref();
-      } else {
+      try {
+        if (server) {
+          await new Promise((resolve) => {
+            server.close(() => {
+              logger.info('HTTP server closed');
+              resolve();
+            });
+          });
+        }
+
+        // Close BullMQ queue first to finish pending commands
+        await closeEmailQueue();
+
+        // Close shared Redis connection
+        await closeRedisConnection();
+
+        // Disconnect MongoDB Atlas
+        await disconnectDatabase();
+
+        logger.info('All connections closed. Gateway exited cleanly.');
         process.exit(0);
+      } catch (err) {
+        logger.error({ err: err.message }, 'Error during graceful shutdown');
+        process.exit(1);
       }
     };
 

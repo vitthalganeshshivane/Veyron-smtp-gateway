@@ -51,3 +51,19 @@ export async function enqueueEmail(jobData, jobId) {
   logger.info({ jobId, projectId: jobData.projectId }, 'Email successfully enqueued in BullMQ');
   return job;
 }
+
+/**
+ * Gracefully close the BullMQ Queue connection
+ */
+export async function closeEmailQueue() {
+  if (emailQueue) {
+    try {
+      await emailQueue.close();
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Error closing BullMQ queue');
+    } finally {
+      emailQueue = null;
+      logger.info('BullMQ email queue closed gracefully');
+    }
+  }
+}
