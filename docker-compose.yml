@@ -1,0 +1,118 @@
+services:
+  # ========================================================
+  # Redis 7 Alpine - In-Memory Queue Store
+  # Isolated to internal Docker network (NOT exposed publicly)
+  # Persistent volume + Append-Only File (AOF)
+  # Capped at 128 MB for Oracle Cloud 1 GB RAM VM
+  # ========================================================
+  mail-redis:
+    image: redis:7-alpine
+    container_name: veyron-mail-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
+      --save 900 1
+      --save 300 10
+    volumes:
+      - redis_data:/data
+    networks:
+      - veyron-internal
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================================
+  # Mail API Service - Express REST API
+  # Authenticates projects, validates payloads & enqueues jobs
+  # ========================================================
+  mail-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: veyron-backend:latest
+    container_name: veyron-mail-api
+    restart: unless-stopped
+    command: ["node", "src/server.js"]
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - REDIS_HOST=mail-redis
+      - REDIS_PORT=6379
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      mail-redis:
+        condition: service_healthy
+    networks:
+      - veyron-internal
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================================
+  # Mail Worker Service - BullMQ Dedicated Consumer Process
+  # Consumes queue jobs, rate limits, delivers via Nodemailer
+  # ========================================================
+  mail-worker:
+    image: veyron-backend:latest
+    container_name: veyron-mail-worker
+    restart: unless-stopped
+    command: ["node", "src/workers/emailWorker.js"]
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=mail-redis
+      - REDIS_PORT=6379
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-5}
+    depends_on:
+      mail-redis:
+        condition: service_healthy
+    networks:
+      - veyron-internal
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  veyron-internal:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
