@@ -10,7 +10,8 @@ import {
   BarChart3,
   Activity,
   Settings,
-  Key
+  Key,
+  Sparkles
 } from 'lucide-react';
 
 export function ProductSubnav({ activeTab, onSelectTab }) {
@@ -19,6 +20,7 @@ export function ProductSubnav({ activeTab, onSelectTab }) {
 
   const adminNav = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'showcase', label: 'Product Tour & Guides', icon: Sparkles },
     { id: 'approvals', label: 'User Approvals', icon: Users },
     { id: 'logs', label: 'Email Logs', icon: Mail },
     { id: 'queue', label: 'Queue Engine', icon: Layers },
@@ -31,6 +33,7 @@ export function ProductSubnav({ activeTab, onSelectTab }) {
 
   const userNav = [
     { id: 'portal', label: 'API Key & Integration', icon: Key },
+    { id: 'showcase', label: 'Product Tour & Guides', icon: Sparkles },
     { id: 'logs', label: 'My Email Logs', icon: Mail },
     { id: 'settings', label: 'Account Profile', icon: Settings },
   ];

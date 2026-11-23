@@ -6,6 +6,7 @@ import { ProductSubnav } from './components/ProductSubnav.jsx';
 import { Footer } from './components/Footer.jsx';
 
 import { OverviewPage } from './pages/OverviewPage.jsx';
+import { ShowcasePage } from './pages/ShowcasePage.jsx';
 import { UsersApprovalPage } from './pages/UsersApprovalPage.jsx';
 import { UserPortalPage } from './pages/UserPortalPage.jsx';
 import { LogsPage } from './pages/LogsPage.jsx';
@@ -55,6 +56,7 @@ export function App() {
       {/* Main View Area */}
       <main className="flex-1 flex flex-col w-full">
         {activeTab === 'overview' && <OverviewPage onNavigate={setActiveTab} />}
+        {activeTab === 'showcase' && <ShowcasePage />}
         {activeTab === 'approvals' && <UsersApprovalPage />}
         {activeTab === 'portal' && <UserPortalPage />}
         {activeTab === 'logs' && <LogsPage />}
