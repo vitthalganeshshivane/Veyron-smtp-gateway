@@ -34,6 +34,11 @@ export function ShowcasePage({ onNavigateToAuth }) {
   const [testSender, setTestSender] = useState('billing@yourdomain.com');
   const [testSmtpHost, setTestSmtpHost] = useState('smtp.hostinger.com');
   const [testSubject, setTestSubject] = useState('Welcome to our Platform!');
+  const [openFaq, setOpenFaq] = useState(null);
+
+  const toggleFaq = (index) => {
+    setOpenFaq(openFaq === index ? null : index);
+  };
 
   const copySnippet = (code) => {
     navigator.clipboard.writeText(code);
@@ -695,6 +700,79 @@ $response`;
             Intelligently distinguishes transient network/greylisting errors (retrying with exponential backoff)
             from permanent 5xx mailbox errors, preserving server IP reputation.
           </p>
+        </div>
+      </section>
+
+      {/* 6. ENGINEERING AUDIT & TECHNICAL DOUBTS FAQ */}
+      <section className="bg-canvas border border-hairline rounded-md p-6 sm:p-8 space-y-6">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-canvas-tint border border-hairline rounded-xs text-[11px] font-mono text-ink mb-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-band-forest" />
+            <span>ARCHITECTURE AUDIT & FREQUENTLY ASKED QUESTIONS</span>
+          </div>
+          <h2 className="font-serif text-[24px] text-ink font-normal">Technical Deep-Dive & Production Safeguards</h2>
+          <div className="w-8 h-1 bg-accent-gold mt-1.5 mb-2"></div>
+          <p className="text-[13px] text-ink/70">
+            Crucial verification details regarding deliverability, authentication alignment, duplicate prevention, and privilege boundaries.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {[
+            {
+              q: 'Does Veyron preserve sender authentication (SPF, DKIM, and DMARC)?',
+              a: 'Yes, 100%. Because Veyron connects to your genuine domain SMTP server (e.g., Hostinger, Google Workspace, AWS SES) using authenticated credentials, the actual delivery to the destination MTA (Gmail/Outlook) is made directly from your provider’s authorized mail server IPs. Your domain’s SPF records already authorize these IPs, and your provider signs the email with your domain’s DKIM key. DMARC aligns cleanly because the From header matches the authenticated mailbox. If you pre-sign with custom DKIM, Veyron’s rawMime mode forwards the payload byte-for-byte without header alteration.'
+            },
+            {
+              q: 'Could the fallback mechanism or queue retries accidentally send duplicate emails?',
+              a: 'No. Account selection occurs strictly at API ingestion time. Once a job enters the queue, it is locked to that assigned account; Veyron never dynamically switches to a secondary SMTP account mid-flight or on timeout. To prevent duplicate submissions over flaky networks, Veyron supports the Idempotency-Key HTTP header. Furthermore, BullMQ uses Redis atomic locks with a 40-second lock window (lockDuration) so only a single worker stream can process an email at a time. The job is marked sent only when the upstream SMTP server returns an explicit 250 OK acknowledgment.'
+            },
+            {
+              q: 'How reliable is the BullMQ worker in a 1 GB RAM cloud VM production environment?',
+              a: 'The stack is tuned specifically for low-resource environments. Redis 7 is capped at 128 MB maxmemory with noeviction policy, ensuring the OS never runs out of memory. The BullMQ worker runs in an independent Docker container with process supervision (restart: unless-stopped). It features graceful shutdown handling for SIGTERM/SIGINT, which pauses worker polling, awaits the completion of in-flight deliveries, closes the Redis connection, and disconnects MongoDB before exiting.'
+            },
+            {
+              q: 'Do existing registered users have legitimate administrator privileges?',
+              a: 'No, privileges are strictly segregated. Master administrators exist in a separate admins collection (bootstrapped with ADMIN_INITIAL_EMAIL) with role: "superadmin". Standard registered developers exist in the users collection with role: "user". All administrative routes (/api/v1/users, /api/v1/smtp-accounts, /api/v1/system/health) are guarded by authenticateAdmin middleware which rejects non-admin users with HTTP 403 Forbidden. Regular users can only access their own API keys and logs.'
+            },
+            {
+              q: 'Is a weekly digest triggered automatically and how are recipients selected?',
+              a: 'Veyron is a pure transactional relay infrastructure and queue engine, not a marketing or newsletter SaaS. It has no automated cron jobs that compose or trigger weekly digests. If your client application (like a CRM or SaaS) generates a weekly summary, your application handles recipient selection and dispatches each message to Veyron’s /api/v1/emails/send or /api/v1/emails/bulk endpoint.'
+            },
+            {
+              q: 'Do HTML email templates introduce dynamic rendering edge cases or dependency risks?',
+              a: 'No, because Veyron enforces a strict Zero-Content-Modification Policy. Veyron does not run server-side template engines (no Handlebars, Mustache, or React-Email in the backend). Your applications send pre-rendered HTML/CSS or raw MIME, completely eliminating template parsing crashes, unescaped syntax errors, or missing library dependencies. In addition, all remote attachment URLs are validated against SSRF attacks.'
+            }
+          ].map((item, index) => {
+            const isOpen = openFaq === index;
+            return (
+              <div
+                key={index}
+                className="border border-hairline rounded-xs overflow-hidden transition-colors bg-canvas"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleFaq(index)}
+                  className="w-full text-left p-4 flex items-center justify-between gap-4 hover:bg-canvas-tint transition-colors"
+                >
+                  <span className="font-medium text-[14px] text-ink flex items-center gap-2.5">
+                    <span className="font-mono text-disabled-ink text-[12px]">0{index + 1}.</span>
+                    <span>{item.q}</span>
+                  </span>
+                  <ChevronRight
+                    className={`w-4 h-4 text-disabled-ink shrink-0 transition-transform duration-200 ${
+                      isOpen ? 'rotate-90 text-ink' : ''
+                    }`}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="p-4 pt-1 pb-4 bg-canvas-tint text-[13px] text-ink/80 leading-relaxed border-t border-hairline">
+                    <p>{item.a}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

@@ -351,6 +351,45 @@ To expose your API securely with automatic SSL certificates from Let's Encrypt:
 
 ---
 
+## 🔍 Technical Deep-Dive & Architecture Audit FAQ
+
+### 1. Does Veyron preserve sender authentication (SPF, DKIM, and DMARC)?
+**Yes, 100%.**
+- **SPF:** When Veyron sends an email, it authenticates with your real domain SMTP server (e.g., Hostinger, Google Workspace, AWS SES). The actual TCP connection to the recipient MTA (Gmail, Outlook) is established by your mail provider's servers, which are already authorized in your domain's SPF DNS record (`v=spf1 include:_spf... ~all`).
+- **DKIM & DMARC:** Your upstream SMTP provider signs the outbound message with your domain's private DKIM key. Because the `From` address aligns with your authenticated domain, DMARC alignment passes without issue.
+- **Raw MIME:** If an upstream client pre-signs messages with custom DKIM signatures, Veyron's `rawMime` mode forwards the RFC 822 payload byte-for-byte without header reordering or signature invalidation.
+
+### 2. Can the fallback mechanism or queue retries accidentally send duplicate emails?
+**No.**
+- **No Dynamic Account Switching in Flight:** Account selection happens strictly at ingestion time. Once a job enters BullMQ, it is locked to that assigned account. Veyron never switches to a secondary SMTP account mid-flight or on timeout.
+- **Idempotency Deduplication:** The API supports the `Idempotency-Key` HTTP header. Repeated requests from client networks (e.g., Render/Vercel retries) return the cached response immediately and prevent duplicate queue jobs.
+- **Distributed Redis Locks:** BullMQ uses Redis atomic locks with a 40-second lock window (`lockDuration`). Only one worker thread can ever process an email job at a time.
+- **Strict Delivery Acknowledgments:** A job is only marked `sent` and quotas deducted once the upstream SMTP server responds with an explicit `250 OK` receipt.
+
+### 3. How reliable is the BullMQ worker in a production cloud deployment?
+- **Low-Memory Optimization:** Redis 7 is capped at `128 MB maxmemory` with a `noeviction` policy, specifically designed to run on a free 1 GB RAM cloud instance (Oracle Cloud Free Tier) alongside the API and worker.
+- **Process Supervision:** The worker runs in a separate Docker container (`mail-worker`) supervised by Docker with `restart: unless-stopped`.
+- **Graceful Shutdown:** The worker listens to `SIGTERM` and `SIGINT`, cleanly finishing in-flight deliveries (`await worker.close()`), closing the Redis connection, and disconnecting MongoDB before terminating.
+
+### 4. Do existing users have legitimate administrator privileges?
+**No, privileges are strictly segregated.**
+- **Separate Collections & Role-Based Access Control (RBAC):** Master administrators exist in the `admins` collection (`role: 'superadmin'`), bootstrapped via `ADMIN_INITIAL_EMAIL`. Registered users exist in the `users` collection (`role: 'user'`).
+- **Route Guarding:** All administrative routes (`/api/v1/users`, `/api/v1/smtp-accounts`, `/api/v1/system/health`, `/api/v1/queue/clean`) are protected by the `authenticateAdmin` middleware. If a standard user attempts to access admin APIs, the server responds with `HTTP 403 Forbidden`.
+- **Portal Isolation:** Standard users only have access to their own developer portal (`/portal`), their own API key, and their own email logs.
+
+### 5. Is the weekly digest triggered automatically and how are recipients selected?
+**Veyron is a pure transactional relay infrastructure; it does not generate or schedule automated marketing digests.**
+- Veyron does not contain cron jobs that compose or trigger marketing emails.
+- If your external SaaS or CRM application wants to send a weekly summary or digest to its users, your application handles recipient selection and dispatches the batch to Veyron's `/api/v1/emails/send` or `/api/v1/emails/bulk` API. Veyron acts strictly as the high-throughput delivery relay.
+
+### 6. Do email HTML templates introduce dynamic rendering edge cases or dependency risks?
+**No, because Veyron deliberately enforces a Zero-Content-Modification Policy.**
+- **No Server-Side Template Engine:** Veyron does not compile or parse templates (no Handlebars, Mustache, or React-Email in the backend). Client applications pass pre-rendered HTML/CSS or raw MIME.
+- **No Parsing Failures:** This eliminates template variable syntax errors, unescaped character crashes, or missing dependency vulnerabilities.
+- **Attachment Protection:** Remote attachment URLs are verified by an SSRF security guard to ensure they do not target local or cloud metadata IP addresses.
+
+---
+
 ## 🧪 Verification & Automated Testing
 
 The gateway includes an extensive Vitest automated test suite:
